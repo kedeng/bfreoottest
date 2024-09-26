@@ -8,11 +8,17 @@ const fcSerial = require('./hardware/fcSerial')
 const { checkPortAvailable } = require('./hardware/serialHp')
 const { myLogger, gApp } = require('./test/testHp')
 const { sleep } = require('./utils/support')
-
-const FC_PORT_PATH = "COM5"
+const DEFAULT_PORT = "COM5"
+const FC_PORT_PATH = getTestPort()
 const MAX_CHECK_CLOSE_TIP = 20
 
-const processData = (_, chunk, type) => {
+function getTestPort() {
+  if (process.env.port)
+    return process.env.port
+  return DEFAULT_PORT
+}
+
+function processData(_, chunk, type) {
   myLogger.info(`processData func start: type = ${type}`)
   if (type === 'close')
     gApp.serialIsClosed = true
@@ -20,7 +26,7 @@ const processData = (_, chunk, type) => {
     myLogger.info(chunk.toString())
 }
 
-const checkSerialHaveClosed = async (maxWaitTimes) => {
+async function checkSerialHaveClosed(maxWaitTimes) {
   gApp.checkCloseTick = 0
   while(!gApp.serialIsClosed) {
     await sleep(1000)
@@ -33,7 +39,7 @@ const checkSerialHaveClosed = async (maxWaitTimes) => {
   }
 }
 
-const checkFcHaveReboot = async (maxWaitTimes) => {
+async function checkFcHaveReboot(maxWaitTimes) {
   gApp.checkRebootTick = 0
   while(!checkPortAvailable(FC_PORT_PATH)) {
     await sleep(1000)
@@ -44,24 +50,44 @@ const checkFcHaveReboot = async (maxWaitTimes) => {
       return
     }
   }
+  await sleep(1000)
+}
+
+async function setMotorPwmProtocol(protocol) {
+  myLogger.info(`try set motor pwm protocol: ${protocol}`)
+    await fcSerial.connect({
+      path: FC_PORT_PATH,
+      baudRate: 115200
+    })
+    gApp.serialIsClosed = false
+    fcSerial.write('#\n')
+    await sleep(1000)
+    fcSerial.write('set motor_pwm_protocol = PWM\n')
+    await sleep(1000)
+    fcSerial.write(`save\n`)
+    await checkSerialHaveClosed(10)
+    await sleep(1000)
+    await checkFcHaveReboot(10)
 }
 
 async function start() {
+  myLogger.info(`start test FC_PORT_PATH = ${FC_PORT_PATH}`)
   const isPortAvailable = await checkPortAvailable(FC_PORT_PATH)
   if (!isPortAvailable) {
     myLogger.error(`${FC_PORT_PATH} not available`)
     return
   }
   fcSerial.setGApp(gApp)
+  fcSerial.listen(processData)
   gApp.testTimes = 1
+  await setMotorPwmProtocol('PWM')
   while(true) {
-    myLogger.info(`========${gApp.testTimes}============`)
-    const rt = await fcSerial.connect({
+    myLogger.info(`===============${gApp.testTimes}===============`)
+    await fcSerial.connect({
       path: FC_PORT_PATH,
       baudRate: 115200
     })
     gApp.serialIsClosed = false
-    fcSerial.listen(processData)
     fcSerial.write('#\n')
     await sleep(1000)
     fcSerial.write(`exit\n`)
@@ -69,9 +95,7 @@ async function start() {
     gApp.testTimes++
     await sleep(1000)
     await checkFcHaveReboot(10)
-    myLogger.info(`=====================================`)
   }
 }
-
 
 start()
