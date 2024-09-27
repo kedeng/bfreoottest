@@ -4,6 +4,7 @@
  3. send 'exit'
  4. wait until reboot success and repeat test steps
  */
+const util = require('util')
 const fcSerial = require('./hardware/fcSerial')
 const { checkPortAvailable } = require('./hardware/serialHp')
 const { myLogger, gApp } = require('./test/testHp')
@@ -22,8 +23,11 @@ function processData(_, chunk, type) {
   myLogger.info(`processData func start: type = ${type}`)
   if (type === 'close')
     gApp.serialIsClosed = true
-  if (chunk)
+  if (chunk) {
+  if (type === 'data')
     myLogger.info(chunk.toString())
+  } else if (type === 'open')
+    myLogger.info(chunk)
 }
 
 async function checkSerialHaveClosed(maxWaitTimes) {
@@ -37,21 +41,36 @@ async function checkSerialHaveClosed(maxWaitTimes) {
       return
     }
   }
+  let portAvailable = await checkPortAvailable(FC_PORT_PATH)
+  gApp.checkRebootPortAvaiable = 0
+  while(portAvailable) {
+    myLogger.info(`checkSerialHaveClosed ${FC_PORT_PATH} still available`)
+    if (gApp.checkRebootPortAvaiable > maxWaitTimes) {
+      myLogger.info(`Check ${FC_PORT_PATH} still available after exit command`)
+      process.exit(-1)
+      return
+    }
+    gApp.checkRebootPortAvaiable++
+    await sleep(500)
+    portAvailable = await checkPortAvailable(FC_PORT_PATH)
+  }
 }
 
 async function checkFcHaveReboot(maxWaitTimes) {
   gApp.checkRebootTick = 0
-  while(! await checkPortAvailable(FC_PORT_PATH)) {
+  let portAvailable = await checkPortAvailable(FC_PORT_PATH)
+  while(!portAvailable) {
     myLogger.info(`Check ${FC_PORT_PATH} non-available`)
-    await sleep(1000)
+    await sleep(500)
     gApp.checkRebootTick++
     if (gApp.checkRebootTick > maxWaitTimes) {
       myLogger.info(`Check ${FC_PORT_PATH} not reboot after exit command`)
       process.exit(-1)
       return
     }
+    portAvailable = await checkPortAvailable(FC_PORT_PATH)
   }
-  await sleep(1000)
+  myLogger.info(`Check ${FC_PORT_PATH} available`)
 }
 
 async function setMotorPwmProtocol(protocol) {
@@ -71,6 +90,24 @@ async function setMotorPwmProtocol(protocol) {
     await checkFcHaveReboot(10)
 }
 
+async function tryReConnectPort(maxTryCnt) {
+  gApp.checkCanConnect = 0
+  while(gApp.checkCanConnect < maxTryCnt) {
+    try {
+      await fcSerial.connect({
+        path: FC_PORT_PATH,
+        baudRate: 115200
+      })
+      return
+    } catch(err) {
+      gApp.checkCanConnect++
+      myLogger.error(`tryReConnectPort ${FC_PORT_PATH} error: ${ util.inspect(err) }`)
+    }
+  }
+  throw new Error(`tryReConnectPort ${FC_PORT_PATH} failed`)
+}
+
+
 async function start() {
   myLogger.info(`start test FC_PORT_PATH = ${FC_PORT_PATH}`)
   const isPortAvailable = await checkPortAvailable(FC_PORT_PATH)
@@ -84,17 +121,13 @@ async function start() {
   await setMotorPwmProtocol('PWM')
   while(true) {
     myLogger.info(`===============${gApp.testTimes}===============`)
-    await fcSerial.connect({
-      path: FC_PORT_PATH,
-      baudRate: 115200
-    })
+    await tryReConnectPort(20)
     gApp.serialIsClosed = false
     fcSerial.write('#\n')
-    await sleep(1000)
+    await sleep(500)
     fcSerial.write(`exit\n`)
     await checkSerialHaveClosed(10)
     gApp.testTimes++
-    await sleep(1000)
     await checkFcHaveReboot(10)
   }
 }
