@@ -14,7 +14,7 @@ const MAX_CHECK_CLOSE_TIP = 20
 
 function getTestPort() {
   if (process.env.port)
-    return process.env.port
+    return process.env.port.trim().replaceAll('\"', '')
   return DEFAULT_PORT
 }
 
@@ -41,7 +41,8 @@ async function checkSerialHaveClosed(maxWaitTimes) {
 
 async function checkFcHaveReboot(maxWaitTimes) {
   gApp.checkRebootTick = 0
-  while(!checkPortAvailable(FC_PORT_PATH)) {
+  while(! await checkPortAvailable(FC_PORT_PATH)) {
+    myLogger.info(`Check ${FC_PORT_PATH} non-available`)
     await sleep(1000)
     gApp.checkRebootTick++
     if (gApp.checkRebootTick > maxWaitTimes) {
