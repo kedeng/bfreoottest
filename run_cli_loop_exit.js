@@ -10,13 +10,28 @@ const { checkPortAvailable } = require('./hardware/serialHp')
 const { myLogger, gApp } = require('./test/testHp')
 const { sleep } = require('./utils/support')
 const DEFAULT_PORT = "COM5"
+const DEFAULT_PWM_PROTOCOL = "PWM"
 const FC_PORT_PATH = getTestPort()
+const PWM_PROTOCOL = getTestPwmProtocol()
 const MAX_CHECK_CLOSE_TIP = 20
+
+function isDisSetProto() {
+  console.log(`process.env.disSetProto = ${process.env.disSetProto}`)
+  if (process.env.disSetProto.trim() === "true")
+    return true
+  return false
+}
 
 function getTestPort() {
   if (process.env.port)
     return process.env.port.trim().replaceAll('\"', '')
   return DEFAULT_PORT
+}
+
+function getTestPwmProtocol() {
+  if (process.env.proto)
+    return process.env.proto.trim().replaceAll('\"', '')
+  return DEFAULT_PWM_PROTOCOL
 }
 
 function processData(_, chunk, type) {
@@ -73,6 +88,7 @@ async function checkFcHaveReboot(maxWaitTimes) {
   myLogger.info(`Check ${FC_PORT_PATH} available`)
 }
 
+// Allowed values: PWM, ONESHOT125, ONESHOT42, MULTISHOT, BRUSHED, DSHOT150, DSHOT300, DSHOT600, PROSHOT1000, DISABLED
 async function setMotorPwmProtocol(protocol) {
   myLogger.info(`try set motor pwm protocol: ${protocol}`)
     await fcSerial.connect({
@@ -82,7 +98,7 @@ async function setMotorPwmProtocol(protocol) {
     gApp.serialIsClosed = false
     fcSerial.write('#\n')
     await sleep(1000)
-    fcSerial.write('set motor_pwm_protocol = PWM\n')
+    fcSerial.write(`set motor_pwm_protocol = ${protocol}\n`)
     await sleep(1000)
     fcSerial.write(`save\n`)
     await checkSerialHaveClosed(10)
@@ -118,7 +134,8 @@ async function start() {
   fcSerial.setGApp(gApp)
   fcSerial.listen(processData)
   gApp.testTimes = 1
-  await setMotorPwmProtocol('PWM')
+  if (!isDisSetProto())
+    await setMotorPwmProtocol(PWM_PROTOCOL)
   while(true) {
     myLogger.info(`===============${gApp.testTimes}===============`)
     await tryReConnectPort(20)
