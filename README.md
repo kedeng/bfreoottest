@@ -20,3 +20,10 @@ Not set motor protocol:
 set port=COM7 & set disSetProto=true & node run_cli_loop_exit.js
 ```
 
+## run_cli_autoformat.js
+
+This script will auto find FC and open msc, then try to format it.
+
+```
+node run_cli_autoformat.js
+```
