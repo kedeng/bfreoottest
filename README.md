@@ -27,3 +27,12 @@ This script will auto find FC and open msc, then try to format it.
 ```
 node run_cli_autoformat.js
 ```
+
+
+## run_serail_autotest.js
+
+串口自动测试工具
+
+```
+set cfg=testCfg && node run_serial_autotest.js
+```
