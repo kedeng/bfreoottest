@@ -13,8 +13,8 @@ async function findStmFcPort() {
   const serailPorts = await SerialPort.list()
   for(let i = 0; i < serailPorts.length; i++) {
     const item = serailPorts[i]
-    const { manufacturer, path } = item
-    if (manufacturer.includes(STMICROELECTRONICS))
+    const { manufacturer, path, vendorId } = item
+    if (manufacturer.includes(STMICROELECTRONICS) || vendorId === '0483')
       return path
   }
   return null

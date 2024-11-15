@@ -101,11 +101,11 @@ function parseMotorValStr(mstr) {
   for (let i = 0; i < nstrArr.length; i += MAX_THROTTLE_SIZE) {
     const groupedArr = nstrArr.slice(i, i + MAX_THROTTLE_SIZE)
     const subGroup = []
-    for (let j = 0; i < groupedArr.length; i += MAX_BATCH_SIZE) {
-      const groupedBatchArr = groupedArr.slice(i, i + MAX_BATCH_SIZE)
-      subGroup.push(groupedBatchArr.join(','))
+    for (let j = 0; j < groupedArr.length; j += MAX_BATCH_SIZE) {
+      const groupedBatchArr = groupedArr.slice(j, j + MAX_BATCH_SIZE)
+      rt.push([groupedBatchArr.join(',')])
     }
-    rt.push(subGroup)
+    // rt.push(subGroup)
   }
   return rt
 }
@@ -127,6 +127,7 @@ function parseReplayConfig() {
   gApp.replay_times = replay_times
   const defmotor_vals = parseMotorValStr(defmotor)
   const motor_vals = [];
+  // 测试批次
   let throttle_batch = 1
   for(let i = 0; i < 4; i++)  {
     motor_vals.push(getMotorVals(replayCfg[`motor${i}`], defmotor_vals))
@@ -135,7 +136,8 @@ function parseReplayConfig() {
   }
   gApp.motor_vals = motor_vals
   gApp.throttle_batch = throttle_batch
-  consoleTip(`重复次数为${replay_times}，每次发送批数为${throttle_batch}，油门间发送时间间隔为${throttle_delay_us}微秒`)
+  console.log(motor_vals)
+  consoleTip(`重复次数为${replay_times}，每次测试批数为${throttle_batch}，油门间发送时间间隔为${throttle_delay_us}微秒`)
 }
 
 async function sendCliToFc(fcPort) {
@@ -188,21 +190,26 @@ async function throttleReplayTestExcute(batch) {
       let items = motor_vals[i]
       if (items.length > batch)
         setStrArr = items[batch]
-      fcSerial.write(`motortcclr\n`)
+      fcSerial.write(`motortcclr ${i}\n`)
       await sleep(100)
       // consoleTip(`motor${i}的值为: ${setStr}`)
-      for(let j = 0; j < setStrArr.length; j++) {
-        let setStr = setStrArr[j]
+      let setStr = setStrArr.length ? setStrArr[0] : ''
+      // console.log(`第${i+1}个电机，第${batch}批, setStr = ${util.inspect(setStr)}`)
+      if (setStr && setStr.length) {
         gApp.isMotortcSetComplete = false
-        fcSerial.write(`motortcset ${i} ${j} ${setStr}\n`)
+        const clistr = `motortcset ${i} ${batch} ${setStr}\n`
+        // console.log(clistr)
+        fcSerial.write(clistr)
         await checkMotorSetComplete()
       }
     }
   }
   gApp.isMotortcRunComplete = false
   gApp.isSetThrottle = true
+  // console.log(`before run: batch = ${batch}`)
   fcSerial.write(`motortcrun ${throttle_delay_us}\n`)
   await checkMotorunComplete()
+  // console.log(`complete run: batch = ${batch}`)
 }
 
 // 开始执行油门重放测试
